@@ -32,18 +32,16 @@ describe('BasicProcessingController', () => {
           useValue: {
             resize: jest.fn().mockImplementation(async (data): Promise<ServiceResponse> => {
               if (!fs.existsSync(data.imagePath)) {
-                const error = new Error('Image file not found');
                 return {
                   success: false,
-                  message: error.message,
+                  message: 'Image file not found',
                   error: 'Invalid image path'
                 };
               }
               if (data.width <= 0 || data.height <= 0) {
-                const error = new Error('Invalid dimensions');
                 return {
                   success: false,
-                  message: error.message,
+                  message: 'Invalid dimensions',
                   error: 'Invalid input parameters'
                 };
               }
@@ -60,10 +58,9 @@ describe('BasicProcessingController', () => {
           useValue: {
             saveGreyscaleImage: jest.fn().mockImplementation(async (imagePath): Promise<ServiceResponse> => {
               if (!fs.existsSync(imagePath)) {
-                const error = new Error('Image file not found');
                 return {
                   success: false,
-                  message: error.message,
+                  message: 'Image file not found',
                   error: 'Invalid image path'
                 };
               }
@@ -80,18 +77,16 @@ describe('BasicProcessingController', () => {
           useValue: {
             adjustContrast: jest.fn().mockImplementation(async (data): Promise<ServiceResponse> => {
               if (!fs.existsSync(data.imagePath)) {
-                const error = new Error('Image file not found');
                 return {
                   success: false,
-                  message: error.message,
+                  message: 'Image file not found',
                   error: 'Invalid image path'
                 };
               }
               if (data.contrast < -100 || data.contrast > 100) {
-                const error = new Error('Invalid contrast value');
                 return {
                   success: false,
-                  message: error.message,
+                  message: 'Contrast value must be between -100 and 100',
                   error: 'Invalid contrast value'
                 };
               }
@@ -217,6 +212,10 @@ describe('BasicProcessingController', () => {
     });
   });
 
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe('handleResize', () => {
     it('should call resizeImage with correct parameters', async () => {
       const data = { imagePath: 'test.jpg', width: 100, height: 100 };
@@ -319,7 +318,7 @@ describe('BasicProcessingController', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe('Invalid contrast value');
-        expect(result.message).toBe('Invalid contrast value');
+        expect(result.message).toBe('Contrast value must be between -100 and 100');
       }
       expect(logger.error).toHaveBeenCalledWith('Invalid contrast value: -101');
     });
