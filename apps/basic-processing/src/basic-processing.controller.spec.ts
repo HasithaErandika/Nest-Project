@@ -103,10 +103,9 @@ describe('BasicProcessingController', () => {
           useValue: {
             createNegative: jest.fn().mockImplementation(async (imagePath): Promise<ServiceResponse> => {
               if (!fs.existsSync(imagePath)) {
-                const error = new Error('Image file not found');
                 return {
                   success: false,
-                  message: error.message,
+                  message: 'Image file not found',
                   error: 'Invalid image path'
                 };
               }
@@ -123,10 +122,9 @@ describe('BasicProcessingController', () => {
           useValue: {
             sharpenImage: jest.fn().mockImplementation(async (imagePath): Promise<ServiceResponse> => {
               if (!fs.existsSync(imagePath)) {
-                const error = new Error('Image file not found');
                 return {
                   success: false,
-                  message: error.message,
+                  message: 'Image file not found',
                   error: 'Invalid image path'
                 };
               }
@@ -143,10 +141,9 @@ describe('BasicProcessingController', () => {
           useValue: {
             embossImage: jest.fn().mockImplementation(async (imagePath): Promise<ServiceResponse> => {
               if (!fs.existsSync(imagePath)) {
-                const error = new Error('Image file not found');
                 return {
                   success: false,
-                  message: error.message,
+                  message: 'Image file not found',
                   error: 'Invalid image path'
                 };
               }
@@ -163,18 +160,16 @@ describe('BasicProcessingController', () => {
           useValue: {
             rotate: jest.fn().mockImplementation(async (data): Promise<ServiceResponse> => {
               if (!fs.existsSync(data.imagePath)) {
-                const error = new Error('Image file not found');
                 return {
                   success: false,
-                  message: error.message,
+                  message: 'Image file not found',
                   error: 'Invalid image path'
                 };
               }
               if (data.angle % 90 !== 0) {
-                const error = new Error('Invalid rotation angle');
                 return {
                   success: false,
-                  message: error.message,
+                  message: 'Rotation angle must be a multiple of 90 degrees',
                   error: 'Invalid rotation angle'
                 };
               }
@@ -191,7 +186,6 @@ describe('BasicProcessingController', () => {
           useValue: {
             log: jest.fn(),
             error: jest.fn(),
-            warn: jest.fn(),
           },
         },
       ],
@@ -354,7 +348,7 @@ describe('BasicProcessingController', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe('Invalid rotation angle');
-        expect(result.message).toBe('Invalid rotation angle');
+        expect(result.message).toBe('Rotation angle must be a multiple of 90 degrees');
       }
       expect(logger.error).toHaveBeenCalledWith('Invalid rotation angle: 45');
     });
