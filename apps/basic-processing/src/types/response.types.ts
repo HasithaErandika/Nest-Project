@@ -1,7 +1,7 @@
 export type SuccessResponse = {
   success: true;
   message: string;
-  imagePath: string; // Standardized path property name
+  imagePath: string;
 };
 
 export type ErrorResponse = {

@@ -30,71 +30,165 @@ describe('BasicProcessingController', () => {
         {
           provide: ResizeService,
           useValue: {
-            resize: jest.fn().mockImplementation(async (data) => ({
-              success: true,
-              message: 'Image resized successfully',
-              imagePath: 'output.jpg'
-            }))
+            resize: jest.fn().mockImplementation(async (data): Promise<ServiceResponse> => {
+              if (!fs.existsSync(data.imagePath)) {
+                const error = new Error('Image file not found');
+                return {
+                  success: false,
+                  message: error.message,
+                  error: 'Invalid image path'
+                };
+              }
+              if (data.width <= 0 || data.height <= 0) {
+                const error = new Error('Invalid dimensions');
+                return {
+                  success: false,
+                  message: error.message,
+                  error: 'Invalid input parameters'
+                };
+              }
+              return {
+                success: true,
+                message: 'Image resized successfully',
+                imagePath: 'output.jpg'
+              };
+            })
           },
         },
         {
           provide: GreyscaleService,
           useValue: {
-            saveGreyscaleImage: jest.fn().mockImplementation(async (imagePath) => ({
-              success: true,
-              message: 'Image converted to greyscale successfully',
-              imagePath: 'output.jpg'
-            }))
+            saveGreyscaleImage: jest.fn().mockImplementation(async (imagePath): Promise<ServiceResponse> => {
+              if (!fs.existsSync(imagePath)) {
+                const error = new Error('Image file not found');
+                return {
+                  success: false,
+                  message: error.message,
+                  error: 'Invalid image path'
+                };
+              }
+              return {
+                success: true,
+                message: 'Image converted to greyscale successfully',
+                imagePath: 'output.jpg'
+              };
+            })
           },
         },
         {
           provide: ContrastService,
           useValue: {
-            adjustContrast: jest.fn().mockImplementation(async (data) => ({
-              success: true,
-              message: 'Contrast adjusted successfully',
-              imagePath: 'output.jpg'
-            }))
+            adjustContrast: jest.fn().mockImplementation(async (data): Promise<ServiceResponse> => {
+              if (!fs.existsSync(data.imagePath)) {
+                const error = new Error('Image file not found');
+                return {
+                  success: false,
+                  message: error.message,
+                  error: 'Invalid image path'
+                };
+              }
+              if (data.contrast < -100 || data.contrast > 100) {
+                const error = new Error('Invalid contrast value');
+                return {
+                  success: false,
+                  message: error.message,
+                  error: 'Invalid contrast value'
+                };
+              }
+              return {
+                success: true,
+                message: 'Contrast adjusted successfully',
+                imagePath: 'output.jpg'
+              };
+            })
           },
         },
         {
           provide: NegativeService,
           useValue: {
-            createNegative: jest.fn().mockImplementation(async (imagePath) => ({
-              success: true,
-              message: 'Negative image created successfully',
-              imagePath: 'output.jpg'
-            }))
+            createNegative: jest.fn().mockImplementation(async (imagePath): Promise<ServiceResponse> => {
+              if (!fs.existsSync(imagePath)) {
+                const error = new Error('Image file not found');
+                return {
+                  success: false,
+                  message: error.message,
+                  error: 'Invalid image path'
+                };
+              }
+              return {
+                success: true,
+                message: 'Negative image created successfully',
+                imagePath: 'output.jpg'
+              };
+            })
           },
         },
         {
           provide: SharpenService,
           useValue: {
-            sharpenImage: jest.fn().mockImplementation(async (imagePath) => ({
-              success: true,
-              message: 'Image sharpened successfully',
-              imagePath: 'output.jpg'
-            }))
+            sharpenImage: jest.fn().mockImplementation(async (imagePath): Promise<ServiceResponse> => {
+              if (!fs.existsSync(imagePath)) {
+                const error = new Error('Image file not found');
+                return {
+                  success: false,
+                  message: error.message,
+                  error: 'Invalid image path'
+                };
+              }
+              return {
+                success: true,
+                message: 'Image sharpened successfully',
+                imagePath: 'output.jpg'
+              };
+            })
           },
         },
         {
           provide: EmbossService,
           useValue: {
-            embossImage: jest.fn().mockImplementation(async (imagePath) => ({
-              success: true,
-              message: 'Image embossed successfully',
-              imagePath: 'output.jpg'
-            }))
+            embossImage: jest.fn().mockImplementation(async (imagePath): Promise<ServiceResponse> => {
+              if (!fs.existsSync(imagePath)) {
+                const error = new Error('Image file not found');
+                return {
+                  success: false,
+                  message: error.message,
+                  error: 'Invalid image path'
+                };
+              }
+              return {
+                success: true,
+                message: 'Image embossed successfully',
+                imagePath: 'output.jpg'
+              };
+            })
           },
         },
         {
           provide: RotateService,
           useValue: {
-            rotate: jest.fn().mockImplementation(async (data) => ({
-              success: true,
-              message: 'Image rotated successfully',
-              imagePath: 'output.jpg'
-            }))
+            rotate: jest.fn().mockImplementation(async (data): Promise<ServiceResponse> => {
+              if (!fs.existsSync(data.imagePath)) {
+                const error = new Error('Image file not found');
+                return {
+                  success: false,
+                  message: error.message,
+                  error: 'Invalid image path'
+                };
+              }
+              if (data.angle % 90 !== 0) {
+                const error = new Error('Invalid rotation angle');
+                return {
+                  success: false,
+                  message: error.message,
+                  error: 'Invalid rotation angle'
+                };
+              }
+              return {
+                success: true,
+                message: 'Image rotated successfully',
+                imagePath: 'output.jpg'
+              };
+            })
           },
         },
         {
@@ -141,8 +235,9 @@ describe('BasicProcessingController', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe('Invalid input parameters');
+        expect(result.message).toBe('Invalid dimensions');
       }
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Invalid dimensions: width=-100, height=-100');
     });
 
     it('should handle missing image file', async () => {
@@ -152,8 +247,9 @@ describe('BasicProcessingController', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe('Invalid image path');
+        expect(result.message).toBe('Image file not found');
       }
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Image file not found: nonexistent.jpg');
     });
   });
 
@@ -175,8 +271,9 @@ describe('BasicProcessingController', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe('Invalid image path');
+        expect(result.message).toBe('Image file not found');
       }
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Image file not found: nonexistent.jpg');
     });
   });
 
@@ -198,8 +295,9 @@ describe('BasicProcessingController', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe('Invalid image path');
+        expect(result.message).toBe('Image file not found');
       }
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Image file not found: nonexistent.jpg');
     });
   });
 
@@ -221,8 +319,9 @@ describe('BasicProcessingController', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe('Invalid contrast value');
+        expect(result.message).toBe('Invalid contrast value');
       }
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Invalid contrast value: -101');
     });
 
     it('should handle missing image file', async () => {
@@ -232,8 +331,9 @@ describe('BasicProcessingController', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe('Invalid image path');
+        expect(result.message).toBe('Image file not found');
       }
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Image file not found: nonexistent.jpg');
     });
   });
 
@@ -255,8 +355,9 @@ describe('BasicProcessingController', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe('Invalid rotation angle');
+        expect(result.message).toBe('Invalid rotation angle');
       }
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Invalid rotation angle: 45');
     });
 
     it('should handle missing image file', async () => {
@@ -266,8 +367,9 @@ describe('BasicProcessingController', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe('Invalid image path');
+        expect(result.message).toBe('Image file not found');
       }
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Image file not found: nonexistent.jpg');
     });
   });
 
@@ -289,8 +391,9 @@ describe('BasicProcessingController', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe('Invalid image path');
+        expect(result.message).toBe('Image file not found');
       }
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Image file not found: nonexistent.jpg');
     });
   });
 
@@ -312,8 +415,9 @@ describe('BasicProcessingController', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe('Invalid image path');
+        expect(result.message).toBe('Image file not found');
       }
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Image file not found: nonexistent.jpg');
     });
   });
 });

@@ -40,6 +40,8 @@ describe('EnhancementController', () => {
       const result = await enhancementController.handleHistogramEqualization(imagePath);
       expect(histogramSpy).toHaveBeenCalledWith(imagePath);
       expect(result.success).toBe(true);
+      expect(result.message).toBe('Histogram equalization completed successfully');
+      expect(result.savedImagePath).toBe('output.jpg');
       expect(logger.log).toHaveBeenCalledWith('Received image for histogram equalization');
     });
 
@@ -67,9 +69,9 @@ describe('EnhancementController', () => {
   describe('handleFloodFill', () => {
     it('should call floodFill with correct parameters', async () => {
       const floodFillSpy = jest.spyOn(enhancementService, 'floodFill').mockResolvedValue({
-        success: true,
-        message: 'Flood fill completed successfully',
-        savedImagePath: 'output.jpg',
+        message: 'Flood fill applied successfully. 100 pixels changed.',
+        outputPath: 'output.jpg',
+        pixelsFilled: 100,
       });
       const data = {
         imagePath: 'test.jpg',
@@ -79,7 +81,9 @@ describe('EnhancementController', () => {
       };
       const result = await enhancementController.handleFloodFill(data);
       expect(floodFillSpy).toHaveBeenCalledWith(data.imagePath, data.sr, data.sc, data.newColor);
-      expect(result.success).toBe(true);
+      expect(result.message).toBe('Flood fill applied successfully. 100 pixels changed.');
+      expect(result.outputPath).toBe('output.jpg');
+      expect(result.pixelsFilled).toBe(100);
       expect(logger.log).toHaveBeenCalledWith('Received image for flood fill');
     });
 
