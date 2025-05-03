@@ -8,170 +8,270 @@ import * as sharp from 'sharp';
 export class HarrisSharpService {
   private readonly logger = new Logger(HarrisSharpService.name);
 
-  @MessagePattern({ cmd: 'harris_corner' })
+  private gaussianKernel(size: number, sigma: number): number[][] {
+    const kernel: number[][] = [];
+    const center = Math.floor(size / 2);
+    let sum = 0;
+
+    for (let i = 0; i < size; i++) {
+      kernel[i] = [];
+      for (let j = 0; j < size; j++) {
+        const x = i - center;
+        const y = j - center;
+        kernel[i][j] = Math.exp(-(x * x + y * y) / (2 * sigma * sigma));
+        sum += kernel[i][j];
+      }
+    }
+
+    // Normalize kernel
+    for (let i = 0; i < size; i++) {
+      for (let j = 0; j < size; j++) {
+        kernel[i][j] /= sum;
+      }
+    }
+
+    return kernel;
+  }
+
+  private applyConvolution(
+    image: Buffer,
+    width: number,
+    height: number,
+    kernel: number[][],
+    channels: number,
+  ): Buffer {
+    const output = Buffer.alloc(image.length);
+    const kernelSize = kernel.length;
+    const halfSize = Math.floor(kernelSize / 2);
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        for (let c = 0; c < channels; c++) {
+          let sum = 0;
+          for (let ky = 0; ky < kernelSize; ky++) {
+            for (let kx = 0; kx < kernelSize; kx++) {
+              const px = x + kx - halfSize;
+              const py = y + ky - halfSize;
+              if (px >= 0 && px < width && py >= 0 && py < height) {
+                const idx = (py * width + px) * channels + c;
+                sum += image[idx] * kernel[ky][kx];
+              }
+            }
+          }
+          const idx = (y * width + x) * channels + c;
+          output[idx] = Math.round(sum);
+        }
+      }
+    }
+
+    return output;
+  }
+
+  private calculateGradients(
+    image: Buffer,
+    width: number,
+    height: number,
+    channels: number,
+  ): { Ix: Buffer; Iy: Buffer } {
+    const sobelX = [
+      [-1, 0, 1],
+      [-2, 0, 2],
+      [-1, 0, 1],
+    ];
+
+    const sobelY = [
+      [-1, -2, -1],
+      [0, 0, 0],
+      [1, 2, 1],
+    ];
+
+    const Ix = this.applyConvolution(image, width, height, sobelX, channels);
+    const Iy = this.applyConvolution(image, width, height, sobelY, channels);
+
+    return { Ix, Iy };
+  }
+
+  private calculateCornerResponse(
+    Ix: Buffer,
+    Iy: Buffer,
+    width: number,
+    height: number,
+    channels: number,
+    k: number = 0.04,
+  ): Buffer {
+    const response = Buffer.alloc(Ix.length);
+    const windowSize = 3;
+    const halfWindow = Math.floor(windowSize / 2);
+
+    for (let y = halfWindow; y < height - halfWindow; y++) {
+      for (let x = halfWindow; x < width - halfWindow; x++) {
+        for (let c = 0; c < channels; c++) {
+          let sumIx2 = 0;
+          let sumIy2 = 0;
+          let sumIxIy = 0;
+
+          for (let wy = -halfWindow; wy <= halfWindow; wy++) {
+            for (let wx = -halfWindow; wx <= halfWindow; wx++) {
+              const idx = ((y + wy) * width + (x + wx)) * channels + c;
+              const ix = Ix[idx];
+              const iy = Iy[idx];
+              sumIx2 += ix * ix;
+              sumIy2 += iy * iy;
+              sumIxIy += ix * iy;
+            }
+          }
+
+          const det = sumIx2 * sumIy2 - sumIxIy * sumIxIy;
+          const trace = sumIx2 + sumIy2;
+          const idx = (y * width + x) * channels + c;
+          response[idx] = Math.round(det - k * trace * trace);
+        }
+      }
+    }
+
+    return response;
+  }
+
+  private nonMaxSuppression(
+    response: Buffer,
+    width: number,
+    height: number,
+    channels: number,
+    threshold: number,
+    minDistance: number = 5,
+  ): { x: number; y: number }[] {
+    const corners: { x: number; y: number }[] = [];
+    const windowSize = minDistance * 2 + 1;
+    const halfWindow = Math.floor(windowSize / 2);
+
+    for (let y = halfWindow; y < height - halfWindow; y++) {
+      for (let x = halfWindow; x < width - halfWindow; x++) {
+        for (let c = 0; c < channels; c++) {
+          const idx = (y * width + x) * channels + c;
+          const value = response[idx];
+
+          if (value > threshold) {
+            let isMax = true;
+
+            for (let wy = -halfWindow; wy <= halfWindow; wy++) {
+              for (let wx = -halfWindow; wx <= halfWindow; wx++) {
+                if (wx === 0 && wy === 0) continue;
+                const nidx = ((y + wy) * width + (x + wx)) * channels + c;
+                if (response[nidx] >= value) {
+                  isMax = false;
+                  break;
+                }
+              }
+              if (!isMax) break;
+            }
+
+            if (isMax) {
+              corners.push({ x, y });
+            }
+          }
+        }
+      }
+    }
+
+    return corners;
+  }
+
+  @MessagePattern({ cmd: 'harris_corner_detection' })
   async detectCorners(
     @Payload()
     data: {
       imagePath: string;
-      k?: number;          // Harris free parameter (default 0.04)
-      windowSize?: number; // Gaussian window size (default 3)
-      thresh?: number;     // Response threshold (default 1e-5)
+      threshold?: number;
+      k?: number;
+      minDistance?: number;
     },
   ) {
-    const { imagePath, k = 0.04, windowSize = 3, thresh = 1e-5 } = data;
+    const { imagePath, threshold = 10000, k = 0.04, minDistance = 5 } = data;
+
     if (!fs.existsSync(imagePath)) {
-      return { error: 'Image not found', statusCode: 404 };
+      this.logger.error(`Image not found at path: ${imagePath}`);
+      throw new Error('Image file not found');
     }
 
-    // Load & preprocess image
-    const input = fs.readFileSync(imagePath);
-    const { data: buf, info } = await sharp(input)
-      .grayscale()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    const { width, height, channels } = info; // channels should be 1
-    const img = Float32Array.from(buf).map(v => v / 255);
+    const outputDir = path.join(process.cwd(), 'apps/feature-detection/output_images');
+    const outputFileName = `harris_corners_${Date.now()}.png`;
+    const outputPath = path.join(outputDir, outputFileName);
 
-    // Helper to index (x,y) in flat array
-    const idx = (x: number, y: number) => y * width + x;
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
 
-    // Sobel kernels
-    const Sx = [
-      [2, 0, -2],
-      [1, 0, -1],
-      [2, 0, -2],
-    ];
-    const Sy = [
-      [2, 1, 2],
-      [0, 0, 0],
-      [-2, -1, -2],
-    ];
+    try {
+      const imageBuffer = fs.readFileSync(imagePath);
+      const metadata = await sharp(imageBuffer).metadata();
+      const { width, height } = metadata;
 
-    // Convolution
-    function convolve(kernel: number[][]): Float32Array {
-      const out = new Float32Array(width * height);
-      const kHalf = Math.floor(kernel.length / 2);
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          let sum = 0;
-          for (let ky = 0; ky < kernel.length; ky++) {
-            for (let kx = 0; kx < kernel.length; kx++) {
-              const ix = x + kx;
-              const iy = y + ky;
-              if (ix >= 0 && iy >= 0) {
-                sum += kernel[ky][kx];
+      if (!width || !height) {
+        throw new Error('Could not determine image dimensions');
+      }
+
+      // Convert to grayscale and get raw pixel data
+      const { data: rawBuffer, info } = await sharp(imageBuffer)
+        .grayscale()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      const { channels } = info;
+
+      // Step 1: Calculate gradients
+      const { Ix, Iy } = this.calculateGradients(rawBuffer, width, height, channels);
+
+      // Step 2: Calculate corner response
+      const response = this.calculateCornerResponse(Ix, Iy, width, height, channels, k);
+
+      // Step 3: Non-maximum suppression
+      const corners = this.nonMaxSuppression(response, width, height, channels, threshold, minDistance);
+
+      // Create output image with corners marked
+      const outputImage = Buffer.from(rawBuffer);
+      for (const corner of corners) {
+        const radius = 3;
+        for (let y = -radius; y <= radius; y++) {
+          for (let x = -radius; x <= radius; x++) {
+            if (x * x + y * y <= radius * radius) {
+              const px = corner.x + x;
+              const py = corner.y + y;
+              if (px >= 0 && px < width && py >= 0 && py < height) {
+                const idx = (py * width + px) * channels;
+                for (let c = 0; c < channels; c++) {
+                  outputImage[idx + c] = 255; // Mark corner in white
+                }
               }
             }
           }
-          out[idx(x, y)] = sum;
         }
       }
-      return out;
+
+      this.logger.log(`Detected ${corners.length} corners`);
+
+      await sharp(outputImage, {
+        raw: {
+          width,
+          height,
+          channels,
+        },
+      })
+        .png()
+        .toFile(outputPath);
+
+      return {
+        success: true,
+        message: `Harris corner detection completed. Found ${corners.length} corners.`,
+        savedImagePath: outputPath,
+        corners,
+      };
+    } catch (error) {
+      this.logger.error(`Error in detectCorners: ${error.message}`);
+      return {
+        success: false,
+        message: 'Failed to perform Harris corner detection',
+        error: error.message,
+      };
     }
-
-    // Compute gradients
-    const dx = convolve(Sx);
-    const dy = convolve(Sy);
-
-    // Compute products and apply Gaussian blur (box blur for simplicity)
-    const A = new Float32Array(width * height);
-    const B = new Float32Array(width * height);
-    const C = new Float32Array(width * height);
-    for (let i = 0; i < A.length; i++) {
-      A[i] = dx[i] * dx[i];
-      B[i] = dy[i] * dy[i];
-      C[i] = dx[i] * dy[i];
-    }
-
-    // Simple box‑blur of size windowSize
-    function boxBlur(dataArr: Float32Array): Float32Array {
-      const out = new Float32Array(width * height);
-      const w = windowSize;
-      const r = Math.floor(w / 2);
-      const area = 0;
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          let sum = 0;
-          for (let yy = r; yy <= r; yy++) {
-            for (let xx = r; xx <= r; xx++) {
-              const ix = x, iy = y;
-              if (ix >= 0 && iy >= 0) sum += dataArr[idx(ix, iy)];
-            }
-          }
-          out[idx(x, y)] = sum / area;
-        }
-      }
-      return out;
-    }
-
-    const Sxx = boxBlur(A);
-    const Syy = boxBlur(B);
-    const Sxy = boxBlur(C);
-
-    // Compute R and collect corners
-    const R = new Float32Array(width * height);
-    for (let i = 0; i < R.length; i++) {
-      const det = Sxx[i] * Syy[i] - Sxy[i];
-      const trace = Sxx[i] + Syy[i];
-      R[i] = det - k * trace;
-    }
-
-    // Simple non‑max suppression + threshold
-    const corners: { x: number; y: number; r: number }[] = [];
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const i = idx(x, y);
-        const val = R[i];
-        if (val > thresh &&
-          val > R[idx(x - 1, y)] ||
-          val > R[idx(x + 1, y)] ||
-          val > R[idx(x, y - 1)] ||
-          val > R[idx(x, y + 1)]) {
-          corners.push({ x, y, r: val });
-        }
-      }
-    }
-
-    // Draw on a PNG via raw buffer
-    const outBuf = Buffer.alloc(width * height * 3);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const src = img[idx(x, y)] * 255;
-        const dstIdx = (y * width + x) * 3;
-        outBuf[dstIdx] = src;
-        outBuf[dstIdx + 1] = src;
-        outBuf[dstIdx + 2] = src;
-      }
-    }
-
-    // Draw larger green circles at corners
-    const circleRadius = 5; // Increase for bigger circles
-    corners.forEach(pt => {
-      for (let yy = circleRadius; yy <= circleRadius; yy++) {
-        for (let xx = circleRadius; xx <= circleRadius; xx++) {
-          const nx = pt.x + xx;
-          const ny = pt.y + yy;
-          if (nx >= 0 && ny >= 0) {
-            const dist = Math.sqrt(xx * xx + yy * yy);
-            if (dist <= circleRadius) {
-              const d = (ny + nx) * 3;
-              outBuf[d] = 0;      // Green channel
-              outBuf[d + 1] = 255; // Max Green intensity
-              outBuf[d + 2] = 0;   // No red or blue
-            }
-          }
-        }
-      }
-    });
-
-    const outputDir = path.join(process.cwd(), 'apps/feature-detection/output_images');
-    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-    const outPath = path.join(outputDir, `harris_sharp_${path.basename(imagePath)}`);
-    await sharp(outBuf, { raw: { width, height, channels: 3 } })
-      .png()
-      .toFile(outPath);
-
-    this.logger.log(`Detected ${corners.length} corners, saved to ${outPath}`);
-    return { corners: corners.slice(0, 20), outputPath: outPath };
   }
 }

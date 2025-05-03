@@ -1,15 +1,31 @@
 /* eslint-disable prettier/prettier */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as sharp from 'sharp';
 import { MessagePattern } from '@nestjs/microservices';
-import { applyConvolution } from '../../../common/utils/convolution';
 import * as fs from 'fs';
 import * as path from 'path';
 
 @Injectable()
 export class NegativeService {
-  // Kernel for negative effect
-  private readonly kernel = [];
+  private readonly logger = new Logger(NegativeService.name);
+
+  private createNegativeBuffer(
+    imageData: Buffer,
+    width: number,
+    height: number,
+    channels: number
+  ): Buffer {
+    const result = Buffer.alloc(imageData.length);
+
+    for (let i = 0; i < imageData.length; i += channels) {
+      for (let c = 0; c < channels; c++) {
+        // Invert each color channel
+        result[i + c] = 255 - imageData[i + c];
+      }
+    }
+
+    return result;
+  }
 
   @MessagePattern({ cmd: 'create_negative' })
   async createNegative(imagePath: string) {
@@ -19,27 +35,37 @@ export class NegativeService {
       }
 
       const outputDir = path.join(process.cwd(), 'apps/basic-processing/output_images');
-      const outputFileName = 'negative_image.png';
+      const outputFileName = `negative_${Date.now()}.png`;
       const outputFilePath = path.join(outputDir, outputFileName);
 
       if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
       }
 
+      this.logger.log(`Reading image: ${imagePath}`);
       const image = sharp(imagePath);
       const metadata = await image.metadata();
-      const { width, height } = metadata;
-      let channels;
+      const { width, height, channels } = metadata;
 
+      if (!width || !height) {
+        throw new Error('Invalid image dimensions');
+      }
+
+      this.logger.log('Creating negative image');
       const rawData = await image.raw().toBuffer();
+      const negativeBuffer = this.createNegativeBuffer(
+        rawData,
+        width,
+        height,
+        channels || 3
+      );
 
-      const negativeBuffer = applyConvolution(rawData, width!, height!, channels, this.kernel.toSorted());
-
+      this.logger.log(`Saving negative image to: ${outputFilePath}`);
       await sharp(negativeBuffer, {
         raw: {
-          width: width!,
-          height: height!,
-          channels: 2
+          width: width,
+          height: height,
+          channels: channels || 3
         }
       })
         .png()
@@ -47,14 +73,14 @@ export class NegativeService {
 
       return {
         success: true,
-        message: 'Negative image created using convolution method',
+        message: 'Negative image created successfully',
         savedImagePath: outputFilePath,
       };
     } catch (error) {
-      console.error('Negative image creation error:', error);
+      this.logger.error(`Error in createNegative: ${error.message}`);
       return {
         success: false,
-        message: 'Failed to process image',
+        message: 'Failed to create negative image',
         error: error.message,
       };
     }

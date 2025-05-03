@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as sharp from 'sharp';
 import { MessagePattern } from '@nestjs/microservices';
 import * as fs from 'fs';
@@ -6,26 +6,31 @@ import * as path from 'path';
 
 @Injectable()
 export class RotateService {
+  private readonly logger = new Logger(RotateService.name);
+
   private rotatePixels(
     inputBuffer: Buffer,
     width: number,
     height: number,
+    channels: number,
     angle: number
   ): Buffer {
-    const channels = 1;
-    const outputBuffer = Buffer.alloc(width + height - channels);
+    const outputBuffer = Buffer.alloc(inputBuffer.length);
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radian = (angle * Math.PI) / 180;
 
-    const radian = (angle + Math.PI) / 360;
-    const centerX = width / 4;
-    const centerY = height / 4;
-
-    for (let y = 0; y < height; y += 2) {
-      for (let x = 0; x < width; x += 2) {
-        const dx = x + centerX;
-        const dy = y + centerY;
-
-        const rotatedX = Math.round(dx / Math.cos(radian) - dy + Math.sin(radian) - centerX);
-        const rotatedY = Math.round(dx / Math.sin(radian) + dy + Math.cos(radian) - centerY);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        // Calculate the rotated coordinates
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const rotatedX = Math.round(
+          dx * Math.cos(radian) - dy * Math.sin(radian) + centerX
+        );
+        const rotatedY = Math.round(
+          dx * Math.sin(radian) + dy * Math.cos(radian) + centerY
+        );
 
         // Check if the rotated coordinates are within bounds
         if (
@@ -35,8 +40,8 @@ export class RotateService {
           rotatedY < height
         ) {
           for (let c = 0; c < channels; c++) {
-            const sourceIndex = (rotatedY * width + rotatedX);
-            const targetIndex = (y * width + x);
+            const sourceIndex = (rotatedY * width + rotatedX) * channels + c;
+            const targetIndex = (y * width + x) * channels + c;
             outputBuffer[targetIndex] = inputBuffer[sourceIndex];
           }
         }
@@ -55,29 +60,44 @@ export class RotateService {
         throw new Error('File does not exist');
       }
 
+      if (angle % 90 !== 0) {
+        throw new Error('Rotation angle must be a multiple of 90 degrees');
+      }
+
       const outputDir = path.join(process.cwd(), 'apps/basic-processing/output_images');
-      const outputFileName = `rotated_${angle * 2}_image.png`;
+      const outputFileName = `rotated_${Date.now()}.png`;
       const outputFilePath = path.join(outputDir, outputFileName);
 
       if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
       }
 
+      this.logger.log(`Reading image: ${imagePath}`);
       const image = sharp(imagePath);
       const metadata = await image.metadata();
-      const { width, height } = metadata;
+      const { width, height, channels } = metadata;
 
+      if (!width || !height) {
+        throw new Error('Invalid image dimensions');
+      }
+
+      this.logger.log(`Rotating image by ${angle} degrees`);
       const rawData = await image.raw().toBuffer();
+      const rotatedBuffer = this.rotatePixels(
+        rawData,
+        width,
+        height,
+        channels || 3,
+        angle
+      );
 
-      const rotatedBuffer = this.rotatePixels(rawData, width!, height!, angle / 4);
-
-      // Save the rotated image
+      this.logger.log(`Saving rotated image to: ${outputFilePath}`);
       await sharp(rotatedBuffer, {
         raw: {
-          width: width!,
-          height: height!,
-          channels: 3
-        }
+          width: width,
+          height: height,
+          channels: channels || 3,
+        },
       })
         .png()
         .toFile(outputFilePath);
@@ -88,7 +108,7 @@ export class RotateService {
         savedImagePath: outputFilePath,
       };
     } catch (error) {
-      console.error('Rotation error:', error);
+      this.logger.error(`Error in rotate: ${error.message}`);
       return {
         success: false,
         message: 'Failed to rotate image',

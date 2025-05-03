@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as sharp from 'sharp';
 import { MessagePattern } from '@nestjs/microservices';
 import * as fs from 'fs';
@@ -6,8 +6,10 @@ import * as path from 'path';
 
 @Injectable()
 export class SharpenService {
-  // Do not change the this kernel
-  private readonly strongKernel = [
+  private readonly logger = new Logger(SharpenService.name);
+
+  // Sharpening kernel
+  private readonly sharpKernel = [
     [-1, -1, -1],
     [-1, 9, -1],
     [-1, -1, -1],
@@ -30,6 +32,14 @@ export class SharpenService {
 
           for (let ky = -offset; ky <= offset; ky++) {
             for (let kx = -offset; kx <= offset; kx++) {
+              const nx = x + kx;
+              const ny = y + ky;
+
+              if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                const kernelValue = this.sharpKernel[ky + offset][kx + offset];
+                const neighborIndex = (ny * width + nx) * channels + c;
+                sum += imageData[neighborIndex] * kernelValue;
+              }
             }
           }
 
@@ -49,22 +59,37 @@ export class SharpenService {
       }
 
       const outputDir = path.join(process.cwd(), 'apps/basic-processing/output_images');
-      const outputFilePath = path.join(outputDir, 'sharpened_image.png');
-      if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+      const outputFileName = `sharpened_${Date.now()}.png`;
+      const outputFilePath = path.join(outputDir, outputFileName);
 
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+
+      this.logger.log(`Reading image: ${imagePath}`);
       const image = sharp(imagePath);
       const metadata = await image.metadata();
-      const { width, height, channels = 3 } = metadata;
+      const { width, height, channels } = metadata;
 
+      if (!width || !height) {
+        throw new Error('Invalid image dimensions');
+      }
+
+      this.logger.log('Applying sharpening filter');
       const imageBuffer = await image.raw().toBuffer();
+      const sharpened = this.applyConvolution(
+        imageBuffer,
+        width,
+        height,
+        channels || 3
+      );
 
-      const sharpened = this.applyConvolution(imageBuffer, width!, height!, channels);
-
+      this.logger.log(`Saving sharpened image to: ${outputFilePath}`);
       await sharp(sharpened, {
         raw: {
-          width: width!,
-          height: height!,
-          channels,
+          width: width,
+          height: height,
+          channels: channels || 3,
         },
       })
         .png({ compressionLevel: 6 })
@@ -72,14 +97,14 @@ export class SharpenService {
 
       return {
         success: true,
-        message: 'Image sharpened without resizing',
+        message: 'Image sharpened successfully',
         savedImagePath: outputFilePath,
       };
     } catch (error) {
-      console.error('Sharpening failed:', error);
+      this.logger.error(`Error in sharpenImage: ${error.message}`);
       return {
         success: false,
-        message: 'Image sharpening failed',
+        message: 'Failed to sharpen image',
         error: error.message,
       };
     }
