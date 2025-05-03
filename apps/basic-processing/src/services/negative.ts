@@ -4,6 +4,7 @@ import * as sharp from 'sharp';
 import { MessagePattern } from '@nestjs/microservices';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ServiceResponse } from '../types/response.types';
 
 @Injectable()
 export class NegativeService {
@@ -16,19 +17,14 @@ export class NegativeService {
     channels: number
   ): Buffer {
     const result = Buffer.alloc(imageData.length);
-
-    for (let i = 0; i < imageData.length; i += channels) {
-      for (let c = 0; c < channels; c++) {
-        // Invert each color channel
-        result[i + c] = 255 - imageData[i + c];
-      }
+    for (let i = 0; i < imageData.length; i++) {
+      result[i] = 255 - imageData[i];
     }
-
     return result;
   }
 
   @MessagePattern({ cmd: 'create_negative' })
-  async createNegative(imagePath: string) {
+  async createNegative(imagePath: string): Promise<ServiceResponse> {
     try {
       if (!fs.existsSync(imagePath)) {
         throw new Error('File does not exist');
@@ -74,14 +70,14 @@ export class NegativeService {
       return {
         success: true,
         message: 'Negative image created successfully',
-        savedImagePath: outputFilePath,
+        imagePath: outputFilePath
       };
     } catch (error) {
       this.logger.error(`Error in createNegative: ${error.message}`);
       return {
         success: false,
         message: 'Failed to create negative image',
-        error: error.message,
+        error: error.message
       };
     }
   }

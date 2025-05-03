@@ -4,6 +4,7 @@ import * as sharp from 'sharp';
 import { MessagePattern } from '@nestjs/microservices';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ServiceResponse } from '../types/response.types';
 
 @Injectable()
 export class ContrastService {
@@ -30,7 +31,7 @@ export class ContrastService {
   }
 
   @MessagePattern({ cmd: 'adjust_contrast' })
-  async adjust(data: { imagePath: string; contrast: number }) {
+  async adjust(data: { imagePath: string; contrast: number }): Promise<ServiceResponse> {
     try {
       const { imagePath, contrast } = data;
 
@@ -83,14 +84,14 @@ export class ContrastService {
       return {
         success: true,
         message: 'Contrast adjusted successfully',
-        savedImagePath: outputFilePath,
+        imagePath: outputFilePath
       };
     } catch (error) {
       this.logger.error(`Error in adjust: ${error.message}`);
       return {
         success: false,
         message: 'Failed to adjust contrast',
-        error: error.message,
+        error: error.message
       };
     }
   }

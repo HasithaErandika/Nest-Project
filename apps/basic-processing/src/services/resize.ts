@@ -4,17 +4,16 @@ import * as sharp from 'sharp';
 import { MessagePattern } from '@nestjs/microservices';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ServiceResponse } from '../types/response.types';
 
 @Injectable()
 export class ResizeService {
   private readonly logger = new Logger(ResizeService.name);
 
   @MessagePattern({ cmd: 'resize_image' })
-  async resize(data: { imagePath: string; width: number; height: number }) {
+  async resize(data: { imagePath: string; width: number; height: number }): Promise<ServiceResponse> {
     try {
-      const { imagePath, width, height } = data;
-
-      if (!fs.existsSync(imagePath)) {
+      if (!fs.existsSync(data.imagePath)) {
         throw new Error('File does not exist');
       }
 
@@ -26,31 +25,33 @@ export class ResizeService {
         fs.mkdirSync(outputDir, { recursive: true });
       }
 
-      this.logger.log(`Reading input image: ${imagePath}`);
-      const inputImage = await fs.promises.readFile(imagePath);
-      
-      this.logger.log('Processing image with sharp');
-      const { data: inputBuffer, info: inputInfo } = await sharp(inputImage)
-        .raw()
-        .toBuffer({ resolveWithObject: true });
+      this.logger.log(`Reading image: ${data.imagePath}`);
+      const image = sharp(data.imagePath);
+      const metadata = await image.metadata();
+      const { width, height, channels } = metadata;
 
-      this.logger.log('Performing bilinear interpolation');
+      if (!width || !height) {
+        throw new Error('Invalid image dimensions');
+      }
+
+      this.logger.log('Processing image with bilinear interpolation');
+      const rawData = await image.raw().toBuffer();
       const resizedBuffer = this.bilinearInterpolation(
-        inputBuffer,
-        inputInfo.width,
-        inputInfo.height,
+        rawData,
         width,
         height,
-        inputInfo.channels
+        data.width,
+        data.height,
+        channels || 3
       );
 
       this.logger.log(`Saving resized image to: ${outputFilePath}`);
       await sharp(resizedBuffer, {
         raw: {
-          width: width,
-          height: height,
-          channels: inputInfo.channels,
-        },
+          width: data.width,
+          height: data.height,
+          channels: channels || 3
+        }
       })
         .png()
         .toFile(outputFilePath);
@@ -58,14 +59,14 @@ export class ResizeService {
       return {
         success: true,
         message: 'Image resized successfully',
-        savedImagePath: outputFilePath,
+        imagePath: outputFilePath
       };
-
     } catch (error) {
       this.logger.error(`Error in resize: ${error.message}`);
       return {
         success: false,
-        error: error.message,
+        message: 'Failed to resize image',
+        error: error.message
       };
     }
   }

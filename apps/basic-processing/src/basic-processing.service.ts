@@ -9,6 +9,7 @@ import { EmbossService } from './services/embossing';
 import { RotateService } from './services/rotate';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ServiceResponse } from './types/response.types';
 
 @Injectable()
 export class BasicProcessingService {
@@ -50,32 +51,24 @@ export class BasicProcessingService {
     return true;
   }
 
-  async resizeImage(data: { imagePath: string; width: number; height: number }) {
+  async resizeImage(data: { imagePath: string; width: number; height: number }): Promise<ServiceResponse> {
     try {
       if (!this.validateImagePath(data.imagePath) || !this.validateDimensions(data.width, data.height)) {
-        return { success: false, message: 'Invalid input parameters' };
+        return { success: false, message: 'Invalid input parameters', error: 'Invalid input parameters' };
       }
 
       this.logger.log(`Resizing image: ${data.imagePath} to ${data.width}x${data.height}`);
-      const result = await this.resizeService.resize(data);
-      
-      if (result.success) {
-        this.logger.log(`Image resized successfully: ${result.savedImagePath}`);
-        return { success: true, message: 'Image resized successfully', data: result.savedImagePath };
-      } else {
-        this.logger.error(`Failed to resize image: ${result.error}`);
-        return { success: false, message: 'Failed to resize image', error: result.error };
-      }
+      return await this.resizeService.resize(data);
     } catch (error) {
       this.logger.error(`Error in resizeImage: ${error.message}`);
       return { success: false, message: 'Internal server error', error: error.message };
     }
   }
 
-  async convertToGreyscale(imagePath: string) {
+  async convertToGreyscale(imagePath: string): Promise<ServiceResponse> {
     try {
       if (!this.validateImagePath(imagePath)) {
-        return { success: false, message: 'Invalid image path' };
+        return { success: false, message: 'Invalid image path', error: 'Invalid image path' };
       }
 
       this.logger.log(`Converting image to greyscale: ${imagePath}`);
@@ -86,10 +79,10 @@ export class BasicProcessingService {
     }
   }
 
-  async createNegative(imagePath: string) {
+  async createNegative(imagePath: string): Promise<ServiceResponse> {
     try {
       if (!this.validateImagePath(imagePath)) {
-        return { success: false, message: 'Invalid image path' };
+        return { success: false, message: 'Invalid image path', error: 'Invalid image path' };
       }
 
       this.logger.log(`Creating negative image: ${imagePath}`);
@@ -100,14 +93,14 @@ export class BasicProcessingService {
     }
   }
 
-  async adjustContrast(data: { imagePath: string; contrast: number }) {
+  async adjustContrast(data: { imagePath: string; contrast: number }): Promise<ServiceResponse> {
     try {
       if (!this.validateImagePath(data.imagePath)) {
-        return { success: false, message: 'Invalid image path' };
+        return { success: false, message: 'Invalid image path', error: 'Invalid image path' };
       }
       if (data.contrast < -100 || data.contrast > 100) {
         this.logger.error(`Invalid contrast value: ${data.contrast}`);
-        return { success: false, message: 'Contrast value must be between -100 and 100' };
+        return { success: false, message: 'Contrast value must be between -100 and 100', error: 'Invalid contrast value' };
       }
 
       this.logger.log(`Adjusting contrast for image: ${data.imagePath} with value: ${data.contrast}`);
@@ -118,14 +111,14 @@ export class BasicProcessingService {
     }
   }
 
-  async rotateImage(data: { imagePath: string; angle: number }) {
+  async rotateImage(data: { imagePath: string; angle: number }): Promise<ServiceResponse> {
     try {
       if (!this.validateImagePath(data.imagePath)) {
-        return { success: false, message: 'Invalid image path' };
+        return { success: false, message: 'Invalid image path', error: 'Invalid image path' };
       }
       if (data.angle % 90 !== 0) {
         this.logger.error(`Invalid rotation angle: ${data.angle}`);
-        return { success: false, message: 'Rotation angle must be a multiple of 90 degrees' };
+        return { success: false, message: 'Rotation angle must be a multiple of 90 degrees', error: 'Invalid rotation angle' };
       }
 
       this.logger.log(`Rotating image: ${data.imagePath} by ${data.angle} degrees`);
@@ -136,10 +129,10 @@ export class BasicProcessingService {
     }
   }
 
-  async sharpenImage(imagePath: string) {
+  async sharpenImage(imagePath: string): Promise<ServiceResponse> {
     try {
       if (!this.validateImagePath(imagePath)) {
-        return { success: false, message: 'Invalid image path' };
+        return { success: false, message: 'Invalid image path', error: 'Invalid image path' };
       }
 
       this.logger.log(`Sharpening image: ${imagePath}`);
@@ -150,10 +143,10 @@ export class BasicProcessingService {
     }
   }
 
-  async embossImage(imagePath: string) {
+  async embossImage(imagePath: string): Promise<ServiceResponse> {
     try {
       if (!this.validateImagePath(imagePath)) {
-        return { success: false, message: 'Invalid image path' };
+        return { success: false, message: 'Invalid image path', error: 'Invalid image path' };
       }
 
       this.logger.log(`Embossing image: ${imagePath}`);

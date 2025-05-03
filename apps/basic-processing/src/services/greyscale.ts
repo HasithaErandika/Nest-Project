@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as sharp from 'sharp';
 import { convertToGreyscale } from '../../../common/utils/greyscale';
+import { ServiceResponse } from '../types/response.types';
 
 @Injectable()
 export class GreyscaleService {
@@ -12,7 +13,7 @@ export class GreyscaleService {
   async saveGreyscaleImage(
     imagePath: string,
     filename: string = `greyscale_${Date.now()}.png`
-  ): Promise<{ success: boolean; filePath?: string; error?: string }> {
+  ): Promise<ServiceResponse> {
     try {
       if (!fs.existsSync(imagePath)) {
         throw new Error('File does not exist');
@@ -41,12 +42,14 @@ export class GreyscaleService {
 
       return {
         success: true,
-        filePath: outputPath
+        message: 'Image converted to greyscale successfully',
+        imagePath: outputPath
       };
     } catch (error) {
       this.logger.error(`Error in saveGreyscaleImage: ${error.message}`);
       return {
         success: false,
+        message: 'Failed to convert image to greyscale',
         error: error.message
       };
     }

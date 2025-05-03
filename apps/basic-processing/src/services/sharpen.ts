@@ -1,8 +1,10 @@
+/* eslint-disable prettier/prettier */
 import { Injectable, Logger } from '@nestjs/common';
 import * as sharp from 'sharp';
 import { MessagePattern } from '@nestjs/microservices';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ServiceResponse } from '../types/response.types';
 
 @Injectable()
 export class SharpenService {
@@ -52,7 +54,7 @@ export class SharpenService {
   }
 
   @MessagePattern({ cmd: 'sharpen_image' })
-  async sharpenImage(imagePath: string) {
+  async sharpenImage(imagePath: string): Promise<ServiceResponse> {
     try {
       if (!fs.existsSync(imagePath)) {
         throw new Error('File does not exist');
@@ -76,36 +78,36 @@ export class SharpenService {
       }
 
       this.logger.log('Applying sharpening filter');
-      const imageBuffer = await image.raw().toBuffer();
-      const sharpened = this.applyConvolution(
-        imageBuffer,
+      const rawData = await image.raw().toBuffer();
+      const sharpenedBuffer = this.applyConvolution(
+        rawData,
         width,
         height,
         channels || 3
       );
 
       this.logger.log(`Saving sharpened image to: ${outputFilePath}`);
-      await sharp(sharpened, {
+      await sharp(sharpenedBuffer, {
         raw: {
           width: width,
           height: height,
-          channels: channels || 3,
-        },
+          channels: channels || 3
+        }
       })
-        .png({ compressionLevel: 6 })
+        .png()
         .toFile(outputFilePath);
 
       return {
         success: true,
         message: 'Image sharpened successfully',
-        savedImagePath: outputFilePath,
+        imagePath: outputFilePath
       };
     } catch (error) {
       this.logger.error(`Error in sharpenImage: ${error.message}`);
       return {
         success: false,
         message: 'Failed to sharpen image',
-        error: error.message,
+        error: error.message
       };
     }
   }
