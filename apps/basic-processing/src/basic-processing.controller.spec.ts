@@ -4,6 +4,13 @@ import { BasicProcessingController } from './basic-processing.controller';
 import { BasicProcessingService } from './basic-processing.service';
 import { Logger } from '@nestjs/common';
 import { ServiceResponse, SuccessResponse, ErrorResponse } from './types/response.types';
+import { ResizeService } from './services/resize';
+import { GreyscaleService } from './services/greyscale';
+import { ContrastService } from './services/contrast';
+import { NegativeService } from './services/negative';
+import { SharpenService } from './services/sharpen';
+import { EmbossService } from './services/embossing';
+import { RotateService } from './services/rotate';
 
 describe('BasicProcessingController', () => {
   let basicProcessingController: BasicProcessingController;
@@ -15,6 +22,48 @@ describe('BasicProcessingController', () => {
       controllers: [BasicProcessingController],
       providers: [
         BasicProcessingService,
+        {
+          provide: ResizeService,
+          useValue: {
+            resize: jest.fn(),
+          },
+        },
+        {
+          provide: GreyscaleService,
+          useValue: {
+            saveGreyscaleImage: jest.fn(),
+          },
+        },
+        {
+          provide: ContrastService,
+          useValue: {
+            adjustContrast: jest.fn(),
+          },
+        },
+        {
+          provide: NegativeService,
+          useValue: {
+            createNegative: jest.fn(),
+          },
+        },
+        {
+          provide: SharpenService,
+          useValue: {
+            sharpenImage: jest.fn(),
+          },
+        },
+        {
+          provide: EmbossService,
+          useValue: {
+            embossImage: jest.fn(),
+          },
+        },
+        {
+          provide: RotateService,
+          useValue: {
+            rotate: jest.fn(),
+          },
+        },
         {
           provide: Logger,
           useValue: {

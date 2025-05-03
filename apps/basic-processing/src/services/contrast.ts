@@ -31,7 +31,7 @@ export class ContrastService {
   }
 
   @MessagePattern({ cmd: 'adjust_contrast' })
-  async adjust(data: { imagePath: string; contrast: number }): Promise<ServiceResponse> {
+  async adjustContrast(data: { imagePath: string; contrast: number }): Promise<ServiceResponse> {
     try {
       const { imagePath, contrast } = data;
 
@@ -87,7 +87,7 @@ export class ContrastService {
         imagePath: outputFilePath
       };
     } catch (error) {
-      this.logger.error(`Error in adjust: ${error.message}`);
+      this.logger.error(`Error in adjustContrast: ${error.message}`);
       return {
         success: false,
         message: 'Failed to adjust contrast',

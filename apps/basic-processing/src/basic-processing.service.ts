@@ -104,7 +104,7 @@ export class BasicProcessingService {
       }
 
       this.logger.log(`Adjusting contrast for image: ${data.imagePath} with value: ${data.contrast}`);
-      return await this.contrastService.adjust(data);
+      return await this.contrastService.adjustContrast(data);
     } catch (error) {
       this.logger.error(`Error in adjustContrast: ${error.message}`);
       return { success: false, message: 'Internal server error', error: error.message };
